@@ -1,4 +1,4 @@
-package main
+package task
 
 import (
 	f "github.com/heyuuu/go-lombok/internal/astkit"

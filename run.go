@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/heyuuu/go-lombok/internal/task"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,9 +18,9 @@ func run(args []string) {
 	fmt.Printf("%+v\n", opts)
 	switch opts.cmd {
 	case "gen", "generate":
-		RunTask(taskGenerate, opts.dir)
+		task.RunTask(task.TaskGenerate, opts.dir)
 	case "clear":
-		RunTask(taskClear, opts.dir)
+		task.RunTask(task.TaskClear, opts.dir)
 	case "":
 		log.Fatalln("命令不可为空")
 	default:

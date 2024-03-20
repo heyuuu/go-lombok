@@ -1,4 +1,4 @@
-package main
+package task
 
 import (
 	"fmt"
@@ -23,8 +23,8 @@ type statistic struct {
 type taskType int
 
 const (
-	taskGenerate taskType = iota
-	taskClear
+	TaskGenerate taskType = iota
+	TaskClear
 )
 
 func RunTask(task taskType, dir string) {
@@ -73,7 +73,7 @@ func handleDir(dirPkg string, dirPath string, filePaths []string, task taskType,
 	}
 
 	// generate files
-	if task == taskGenerate { // parse pkg info
+	if task == TaskGenerate { // parse pkg info
 		pkg, err := ScanPkgInfo(dirPkg, srcFiles)
 		if err != nil {
 			return err

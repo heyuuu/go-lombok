@@ -1,9 +1,7 @@
 package main
 
-import (
-	"os"
-)
+import "github.com/heyuuu/go-lombok/cmd"
 
 func main() {
-	run(os.Args)
+	cmd.Execute()
 }
