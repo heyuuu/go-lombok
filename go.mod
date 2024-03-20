@@ -1,3 +1,3 @@
-module lombok
+module github.com/heyuuu/go-lombok
 
-go 1.18
+go 1.21

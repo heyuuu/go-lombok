@@ -1,5 +1,9 @@
 package main
 
-func main() {
+import (
+	"os"
+)
 
+func main() {
+	run(os.Args)
 }
