@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/heyuuu/go-lombok/internal/task"
+	"github.com/heyuuu/go-lombok/internal/lombok"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -21,7 +21,7 @@ var clearCmd = &cobra.Command{
 			dir, _ = os.Getwd()
 		}
 
-		task.RunTask(task.TaskClear, dir)
+		lombok.RunTask(lombok.TaskClear, dir)
 	},
 }
 

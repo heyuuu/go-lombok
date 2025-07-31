@@ -1,7 +1,7 @@
 package astkit
 
 import (
-	"github.com/heyuuu/go-lombok/internal/mapkit"
+	"github.com/heyuuu/go-lombok/internal/utils/mapkit"
 	"go/ast"
 	"go/token"
 	"strconv"

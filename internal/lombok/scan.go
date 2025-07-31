@@ -1,8 +1,8 @@
-package task
+package lombok
 
 import (
-	f "github.com/heyuuu/go-lombok/internal/astkit"
-	"github.com/heyuuu/go-lombok/internal/strkit"
+	f "github.com/heyuuu/go-lombok/internal/utils/astkit"
+	"github.com/heyuuu/go-lombok/internal/utils/strkit"
 	"go/ast"
 	"go/parser"
 	"go/token"

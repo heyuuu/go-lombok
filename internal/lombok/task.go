@@ -1,9 +1,9 @@
-package task
+package lombok
 
 import (
 	"fmt"
-	"github.com/heyuuu/go-lombok/internal/mapkit"
-	"github.com/heyuuu/go-lombok/internal/strkit"
+	"github.com/heyuuu/go-lombok/internal/utils/mapkit"
+	strkit2 "github.com/heyuuu/go-lombok/internal/utils/strkit"
 	"log"
 	"os"
 	"path/filepath"
@@ -138,9 +138,9 @@ func showPkgInfo(pkg *PkgInfo) {
 				tag = "-"
 			}
 			fmt.Printf("    %s.%s %s => %s\n",
-				strkit.PadRight(typ.Name, 20, ' '),
-				strkit.PadRight(prop.Name, 20, ' '),
-				strkit.PadRight(tag, 20, ' '),
+				strkit2.PadRight(typ.Name, 20, ' '),
+				strkit2.PadRight(prop.Name, 20, ' '),
+				strkit2.PadRight(tag, 20, ' '),
 				guessTag)
 		}
 	}
@@ -151,7 +151,7 @@ func tryGuessTag(prop *Property) (string, bool) {
 	var setterMode int // 0: 未匹配，1: 默认模式, 2: 自定义模式
 	var getterTag, setterTag string
 
-	ucName := strkit.UpperCamelCase(prop.Name)
+	ucName := strkit2.UpperCamelCase(prop.Name)
 	if prop.ExistGetters[ucName] {
 		getterMode, getterTag = 1, `get:""`
 	} else if prop.ExistGetters["Get"+ucName] {

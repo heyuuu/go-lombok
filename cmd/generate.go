@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/heyuuu/go-lombok/internal/task"
+	"github.com/heyuuu/go-lombok/internal/lombok"
 	"github.com/spf13/cobra"
 	"os"
 )
@@ -21,7 +21,7 @@ var generateCmd = &cobra.Command{
 			dir, _ = os.Getwd()
 		}
 
-		task.RunTask(task.TaskGenerate, dir)
+		lombok.RunTask(lombok.TaskGenerate, dir)
 	},
 }
 

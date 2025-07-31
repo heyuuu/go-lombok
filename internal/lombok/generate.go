@@ -1,7 +1,7 @@
-package task
+package lombok
 
 import (
-	f "github.com/heyuuu/go-lombok/internal/astkit"
+	"github.com/heyuuu/go-lombok/internal/utils/astkit"
 	"go/ast"
 	"slices"
 )
@@ -12,15 +12,15 @@ func GenFileCode(pkg *PkgInfo) (string, bool) {
 	if !gen.Written() {
 		return "", false
 	}
-	return f.PrintNode(astFile), true
+	return astkit.PrintNode(astFile), true
 }
 
 type propertiesFileBuilder struct {
-	*f.FileBuilder
+	*astkit.FileBuilder
 }
 
 func (b *propertiesFileBuilder) generate(pkg *PkgInfo) *ast.File {
-	b.FileBuilder = f.NewFileBuilder(pkg.Name, pkg.Pkg)
+	b.FileBuilder = astkit.NewFileBuilder(pkg.Name, pkg.Pkg)
 
 	for _, typ := range pkg.SortedTypes() {
 		for _, decl := range b.buildTypeProperties(typ) {
@@ -58,14 +58,14 @@ func (b *propertiesFileBuilder) buildTypeProperties(typ *Type) []ast.Decl {
 
 	recvName := b.getRecvName(typ)
 
-	recv := f.Fields(
-		f.Field(f.Ident(recvName), f.RefType(f.Ident(typ.Name))),
+	recv := astkit.Fields(
+		astkit.Field(astkit.Ident(recvName), astkit.RefType(astkit.Ident(typ.Name))),
 	)
 
 	var result []ast.Decl
 
 	for _, prop := range properties {
-		propFetch := &ast.SelectorExpr{X: f.Ident(recvName), Sel: f.Ident(prop.Name)}
+		propFetch := &ast.SelectorExpr{X: astkit.Ident(recvName), Sel: astkit.Ident(prop.Name)}
 		valueName := "v"
 		if valueName == recvName {
 			valueName = "value"
@@ -75,15 +75,15 @@ func (b *propertiesFileBuilder) buildTypeProperties(typ *Type) []ast.Decl {
 		if prop.Getter != "" {
 			getter := &ast.FuncDecl{
 				Recv: recv,
-				Name: f.Ident(prop.Getter),
+				Name: astkit.Ident(prop.Getter),
 				Type: &ast.FuncType{
-					Params: f.Fields(),
-					Results: f.Fields(&ast.Field{
+					Params: astkit.Fields(),
+					Results: astkit.Fields(&ast.Field{
 						Type: resolveTyp,
 					}),
 				},
-				Body: f.BlockStmt(
-					f.ReturnStmt(propFetch),
+				Body: astkit.BlockStmt(
+					astkit.ReturnStmt(propFetch),
 				),
 			}
 			result = append(result, getter)
@@ -91,16 +91,16 @@ func (b *propertiesFileBuilder) buildTypeProperties(typ *Type) []ast.Decl {
 		if prop.Setter != "" {
 			setter := &ast.FuncDecl{
 				Recv: recv,
-				Name: f.Ident(prop.Setter),
+				Name: astkit.Ident(prop.Setter),
 				Type: &ast.FuncType{
-					Params: f.Fields(
-						f.Field(f.Ident(valueName), resolveTyp),
+					Params: astkit.Fields(
+						astkit.Field(astkit.Ident(valueName), resolveTyp),
 					),
 				},
-				Body: f.BlockStmt(
-					f.AssignStmt(
+				Body: astkit.BlockStmt(
+					astkit.AssignStmt(
 						propFetch,
-						f.Ident(valueName),
+						astkit.Ident(valueName),
 					),
 				),
 			}
@@ -110,7 +110,7 @@ func (b *propertiesFileBuilder) buildTypeProperties(typ *Type) []ast.Decl {
 
 	// 首行注释
 	if len(result) > 0 {
-		result[0].(*ast.FuncDecl).Doc = f.DocComment("\n// properties for " + typ.Name)
+		result[0].(*ast.FuncDecl).Doc = astkit.DocComment("\n// properties for " + typ.Name)
 	}
 
 	return result
