@@ -2,7 +2,6 @@ package lombok
 
 import (
 	f "github.com/heyuuu/go-lombok/internal/utils/astkit"
-	"github.com/heyuuu/go-lombok/internal/utils/strkit"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -248,8 +247,8 @@ func (sc *scanner) resolveType(typ ast.Expr) ast.Expr {
 }
 
 func (sc *scanner) getterName(name string) string {
-	return strkit.UpperCamelCase(name)
+	return pascalCase(name)
 }
 func (sc *scanner) setterName(name string) string {
-	return "Set" + strkit.UpperCamelCase(name)
+	return "Set" + pascalCase(name)
 }

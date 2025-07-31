@@ -21,7 +21,7 @@ var clearCmd = &cobra.Command{
 			dir, _ = os.Getwd()
 		}
 
-		lombok.RunTask(lombok.TaskClear, dir)
+		lombok.Clear(dir)
 	},
 }
 

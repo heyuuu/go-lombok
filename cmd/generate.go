@@ -21,7 +21,7 @@ var generateCmd = &cobra.Command{
 			dir, _ = os.Getwd()
 		}
 
-		lombok.RunTask(lombok.TaskGenerate, dir)
+		lombok.Generate(dir)
 	},
 }
 

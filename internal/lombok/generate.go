@@ -7,9 +7,9 @@ import (
 )
 
 func GenFileCode(pkg *PkgInfo) (string, bool) {
-	gen := &propertiesFileBuilder{}
-	astFile := gen.generate(pkg)
-	if !gen.Written() {
+	builder := &propertiesFileBuilder{}
+	astFile := builder.generate(pkg)
+	if !builder.Written() {
 		return "", false
 	}
 	return astkit.PrintNode(astFile), true

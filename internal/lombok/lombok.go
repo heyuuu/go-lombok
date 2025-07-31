@@ -3,7 +3,6 @@ package lombok
 import (
 	"fmt"
 	"github.com/heyuuu/go-lombok/internal/utils/mapkit"
-	strkit2 "github.com/heyuuu/go-lombok/internal/utils/strkit"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,20 +13,31 @@ import (
 
 const generateExt = ".properties.go"
 
+func Clear(dir string) {
+	deleted := 0
+	eachGoDir(dir, func(dirPath string, filePaths []string) {
+		for _, filePath := range filePaths {
+			if isGenerateFile(filePath) {
+				err := os.Remove(filePath)
+				if err != nil {
+					log.Fatalln(err)
+				}
+
+				deleted++
+				log.Println("Remove File: " + filePath)
+			}
+		}
+	})
+	log.Printf("处理完成. 移除文件 %d\n", deleted)
+}
+
 type statistic struct {
 	unchanged int
 	updated   int
 	deleted   int
 }
 
-type taskType int
-
-const (
-	TaskGenerate taskType = iota
-	TaskClear
-)
-
-func RunTask(task taskType, dir string) {
+func Generate(dir string) {
 	basePkg := getNameFromModFile(dir)
 	fmt.Println(basePkg)
 
@@ -38,7 +48,7 @@ func RunTask(task taskType, dir string) {
 			dirPkg = basePkg + dirPath[len(dir):]
 		}
 
-		err := handleDir(dirPkg, dirPath, filePaths, task, &stat)
+		err := handleDir(dirPkg, dirPath, filePaths, &stat)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -46,21 +56,8 @@ func RunTask(task taskType, dir string) {
 	log.Printf("处理完成. 共有更新文件 %d, 未变更文件 %d, 移除文件 %d\n", stat.updated, stat.unchanged, stat.deleted)
 }
 
-func getNameFromModFile(dir string) string {
-	modFile := filepath.Join(dir, "go.mod")
-	data, err := os.ReadFile(modFile)
-	if err != nil {
-		return ""
-	}
-
-	if match := regexp.MustCompile(`module ([\w./]+)`).FindSubmatch(data); len(match) > 0 {
-		return string(match[1])
-	}
-	return ""
-}
-
 // 处理单个文件夹，不递归
-func handleDir(dirPkg string, dirPath string, filePaths []string, task taskType, stat *statistic) error {
+func handleDir(dirPkg string, dirPath string, filePaths []string, stat *statistic) error {
 	// records old files
 	srcFiles := make([]string, 0, len(filePaths))
 	oldFiles := make(map[string]bool)
@@ -73,31 +70,29 @@ func handleDir(dirPkg string, dirPath string, filePaths []string, task taskType,
 	}
 
 	// generate files
-	if task == TaskGenerate { // parse pkg info
-		pkg, err := ScanPkgInfo(dirPkg, srcFiles)
+	pkg, err := ScanPkgInfo(dirPkg, srcFiles)
+	if err != nil {
+		return err
+	}
+
+	// show pkg info
+	showPkgInfo(pkg)
+
+	// generate file
+	genCode, ok := GenFileCode(pkg)
+	if ok {
+		genFile := filepath.Join(dirPath, pkg.Name+generateExt)
+		isChanged, err := writeFileIfChanged(genFile, genCode)
 		if err != nil {
 			return err
 		}
 
-		// show pkg info
-		showPkgInfo(pkg)
-
-		// generate file
-		genCode, ok := GenFileCode(pkg)
-		if ok {
-			genFile := filepath.Join(dirPath, pkg.Name+generateExt)
-			isChanged, err := writeFileIfChanged(genFile, genCode)
-			if err != nil {
-				return err
-			}
-
-			delete(oldFiles, genFile)
-			if isChanged {
-				stat.updated++
-				log.Println("Update file: " + genFile)
-			} else {
-				stat.unchanged++
-			}
+		delete(oldFiles, genFile)
+		if isChanged {
+			stat.updated++
+			log.Println("Update file: " + genFile)
+		} else {
+			stat.unchanged++
 		}
 	}
 
@@ -111,6 +106,19 @@ func handleDir(dirPkg string, dirPath string, filePaths []string, task taskType,
 		log.Println("Remove File: " + oldFile)
 	}
 	return nil
+}
+
+func getNameFromModFile(dir string) string {
+	modFile := filepath.Join(dir, "go.mod")
+	data, err := os.ReadFile(modFile)
+	if err != nil {
+		return ""
+	}
+
+	if match := regexp.MustCompile(`module ([\w./]+)`).FindSubmatch(data); len(match) > 0 {
+		return string(match[1])
+	}
+	return ""
 }
 
 func showPkgInfo(pkg *PkgInfo) {
@@ -138,9 +146,9 @@ func showPkgInfo(pkg *PkgInfo) {
 				tag = "-"
 			}
 			fmt.Printf("    %s.%s %s => %s\n",
-				strkit2.PadRight(typ.Name, 20, ' '),
-				strkit2.PadRight(prop.Name, 20, ' '),
-				strkit2.PadRight(tag, 20, ' '),
+				padRight(typ.Name, 20, ' '),
+				padRight(prop.Name, 20, ' '),
+				padRight(tag, 20, ' '),
 				guessTag)
 		}
 	}
@@ -151,7 +159,7 @@ func tryGuessTag(prop *Property) (string, bool) {
 	var setterMode int // 0: 未匹配，1: 默认模式, 2: 自定义模式
 	var getterTag, setterTag string
 
-	ucName := strkit2.UpperCamelCase(prop.Name)
+	ucName := pascalCase(prop.Name)
 	if prop.ExistGetters[ucName] {
 		getterMode, getterTag = 1, `get:""`
 	} else if prop.ExistGetters["Get"+ucName] {
@@ -212,14 +220,4 @@ func eachGoDir(dir string, handler func(dirPath string, filePaths []string)) {
 	if len(filePaths) > 0 {
 		handler(dir, filePaths)
 	}
-}
-
-func writeFileIfChanged(fileName string, content string) (changed bool, err error) {
-	existContent, err := os.ReadFile(fileName)
-	if err == nil && string(existContent) == content {
-		return false, nil
-	}
-
-	err = os.WriteFile(fileName, []byte(content), 0644)
-	return true, err
 }
