@@ -103,11 +103,12 @@ func (typ *Type) ExistsRecvName() (string, bool) {
 }
 
 type Property struct {
-	Name   string
-	Getter string
-	Setter string
-	Tag    string
-	Type   ast.Expr
+	Name        string
+	Getter      string
+	IsRefGetter bool
+	Setter      string
+	Tag         string
+	Type        ast.Expr
 
 	// private
 	existingGetters []string

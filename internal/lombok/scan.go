@@ -127,10 +127,18 @@ func (sc *scanner) parsePropertyTag(typ *Type, prop *Property, tagStr string) {
 		typ.RecvName = recvVal
 	}
 	if propVal, ok := tag.Lookup("prop"); ok {
+		if strings.HasPrefix(propVal, "&") {
+			prop.IsRefGetter = true
+			propVal = propVal[1:]
+		}
 		prop.Getter = sc.calcGetterName(prop, propVal)
 		prop.Setter = sc.calcSetterName(prop, propVal, true)
 	}
 	if getterVal, ok := tag.Lookup("get"); ok {
+		if strings.HasPrefix(getterVal, "&") {
+			prop.IsRefGetter = true
+			getterVal = getterVal[1:]
+		}
 		prop.Getter = sc.calcGetterName(prop, getterVal)
 	}
 	if setterVal, ok := tag.Lookup("set"); ok {

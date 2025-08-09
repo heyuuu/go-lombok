@@ -3,6 +3,7 @@ package lombok
 import (
 	"github.com/heyuuu/go-lombok/internal/utils/astkit"
 	"go/ast"
+	"go/token"
 )
 
 func GenFileCode(pkg *PkgInfo) string {
@@ -65,20 +66,37 @@ func (b *propertiesFileBuilder) buildTypeProperties(typ *Type) []ast.Decl {
 
 		// getter
 		if b.isValidMethodName(prop.Getter) {
-			getter := &ast.FuncDecl{
-				Recv: recv,
-				Name: ast.NewIdent(prop.Getter),
-				Type: &ast.FuncType{
-					Params: astkit.Fields(),
-					Results: astkit.Fields(&ast.Field{
-						Type: resolveTyp,
-					}),
-				},
-				Body: astkit.BlockStmt(
-					astkit.ReturnStmt(propFetch),
-				),
+			if prop.IsRefGetter {
+				getter := &ast.FuncDecl{
+					Recv: recv,
+					Name: ast.NewIdent(prop.Getter),
+					Type: &ast.FuncType{
+						Params: astkit.Fields(),
+						Results: astkit.Fields(&ast.Field{
+							Type: &ast.StarExpr{X: resolveTyp},
+						}),
+					},
+					Body: astkit.BlockStmt(
+						astkit.ReturnStmt(&ast.UnaryExpr{Op: token.AND, X: propFetch}),
+					),
+				}
+				result = append(result, getter)
+			} else {
+				getter := &ast.FuncDecl{
+					Recv: recv,
+					Name: ast.NewIdent(prop.Getter),
+					Type: &ast.FuncType{
+						Params: astkit.Fields(),
+						Results: astkit.Fields(&ast.Field{
+							Type: resolveTyp,
+						}),
+					},
+					Body: astkit.BlockStmt(
+						astkit.ReturnStmt(propFetch),
+					),
+				}
+				result = append(result, getter)
 			}
-			result = append(result, getter)
 		}
 
 		// setter
