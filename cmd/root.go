@@ -9,7 +9,7 @@ import (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "go-lombok",
-	Short: "go-lombok v0.2.0",
+	Short: "go-lombok v0.3.0",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
