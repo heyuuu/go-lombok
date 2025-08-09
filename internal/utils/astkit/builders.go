@@ -1,9 +1,10 @@
 package astkit
 
 import (
-	"github.com/heyuuu/go-lombok/internal/utils/mapkit"
 	"go/ast"
 	"go/token"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -40,7 +41,8 @@ func (imports *Imports) Build() *ast.GenDecl {
 		return nil
 	}
 
-	pkgNames := mapkit.SortedKeys(imports.imports)
+	pkgNames := slices.Collect(maps.Keys(imports.imports))
+	slices.Sort(pkgNames)
 
 	importSpecs := make([]ast.Spec, len(pkgNames))
 	for i, pkgName := range pkgNames {
@@ -48,11 +50,13 @@ func (imports *Imports) Build() *ast.GenDecl {
 
 		var aliasNameNode *ast.Ident
 		if aliasName != imports.getDefaultAlias(pkgName) {
-			aliasNameNode = Ident(aliasName)
+			aliasNameNode = ast.NewIdent(aliasName)
 		}
 
 		importSpecs[i] = &ast.ImportSpec{
-			Path: String(pkgName),
+			Path: &ast.BasicLit{
+				Kind: token.STRING, Value: strconv.Quote(pkgName),
+			},
 			Name: aliasNameNode,
 		}
 	}
@@ -109,7 +113,7 @@ func (b *FileBuilder) BuildFile() *ast.File {
 	decls = append(decls, b.decls...)
 
 	return &ast.File{
-		Name:  Ident(b.name),
+		Name:  ast.NewIdent(b.name),
 		Decls: decls,
 	}
 }
