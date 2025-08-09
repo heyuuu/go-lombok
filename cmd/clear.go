@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"github.com/heyuuu/go-lombok/internal/lombok"
-	"os"
-
 	"github.com/spf13/cobra"
+	"log"
+	"path/filepath"
 )
 
 var clearFlags struct {
@@ -16,9 +16,9 @@ var clearCmd = &cobra.Command{
 	Use:   "clear",
 	Short: "Clear lombok code",
 	Run: func(cmd *cobra.Command, args []string) {
-		dir := clearFlags.dir
-		if dir == "" {
-			dir, _ = os.Getwd()
+		dir, err := filepath.Abs(generateFlags.dir)
+		if err != nil {
+			log.Fatalln(err)
 		}
 
 		lombok.Clear(dir)

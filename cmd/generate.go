@@ -3,7 +3,8 @@ package cmd
 import (
 	"github.com/heyuuu/go-lombok/internal/lombok"
 	"github.com/spf13/cobra"
-	"os"
+	"log"
+	"path/filepath"
 )
 
 var generateFlags struct {
@@ -13,12 +14,12 @@ var generateFlags struct {
 // generateCmd represents the generate command
 var generateCmd = &cobra.Command{
 	Use:     "generate",
-	Aliases: []string{"gen"},
+	Aliases: []string{"g", "gen"},
 	Short:   "Generate lombok code",
 	Run: func(cmd *cobra.Command, args []string) {
-		dir := generateFlags.dir
-		if dir == "" {
-			dir, _ = os.Getwd()
+		dir, err := filepath.Abs(generateFlags.dir)
+		if err != nil {
+			log.Fatalln(err)
 		}
 
 		lombok.Generate(dir)
