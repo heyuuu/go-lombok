@@ -10,21 +10,58 @@ import (
 	"strings"
 )
 
-const generateExt = ".properties.go"
+const genFileName = "properties.gen.go"
 
-func Clear(dir string) {
+// 通过代码目录遍历go包并调用回调
+func iterPkgFiles(root string, handler func(dir string, srcFiles []string)) {
+	files, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+
+	var srcFiles []string
+	for _, file := range files {
+		name := file.Name()
+		if name == "" || name[0] == '_' || name[0] == '.' {
+			continue
+		}
+
+		path := filepath.Join(root, name)
+		if file.IsDir() {
+			iterPkgFiles(path, handler)
+		} else if strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !strings.HasSuffix(name, ".gen.go") {
+			srcFiles = append(srcFiles, path)
+		}
+	}
+	if len(srcFiles) > 0 {
+		handler(root, srcFiles)
+	}
+}
+
+// GenerateByCode 基于代码字符串的扫描和生成，主要用于单元测试
+func GenerateByCode(pkgName string, code string) (string, error) {
+	pkg, err := ScanCode(pkgName, code)
+	if err != nil {
+		return "", err
+	}
+
+	result := GenFileCode(pkg)
+	return result, nil
+}
+
+// Clear 清理生成文件
+func Clear(root string) {
 	deleted := 0
-	eachGoDir(dir, func(dirPath string, filePaths []string) {
-		for _, filePath := range filePaths {
-			if isGenerateFile(filePath) {
-				err := os.Remove(filePath)
-				if err != nil {
-					log.Fatalln(err)
-				}
+	iterPkgFiles(root, func(dir string, _ []string) {
+		genFile := filepath.Join(dir, genFileName)
+		exists, err := deleteFileIfExists(genFile)
+		if err != nil {
+			log.Fatalln(err)
+		}
 
-				deleted++
-				log.Println("Remove File: " + filePath)
-			}
+		if exists {
+			deleted++
+			log.Println("Remove File: " + genFile)
 		}
 	})
 	log.Printf("处理完成. 移除文件 %d\n", deleted)
@@ -36,18 +73,19 @@ type statistic struct {
 	deleted   int
 }
 
-func Generate(dir string) {
-	basePkg := getNameFromModFile(dir)
+// Generate 基于代码目录的扫描、生成、清理
+func Generate(root string) {
+	basePkg := getNameFromModFile(root)
 	fmt.Println(basePkg)
 
 	var stat statistic
-	eachGoDir(dir, func(dirPath string, filePaths []string) {
+	iterPkgFiles(root, func(dir string, srcFiles []string) {
 		var dirPkg string
-		if basePkg != "" && strings.HasPrefix(dirPath, dir) {
-			dirPkg = basePkg + dirPath[len(dir):]
+		if basePkg != "" && strings.HasPrefix(dir, root) {
+			dirPkg = basePkg + dir[len(root):]
 		}
 
-		err := handleDir(dirPkg, dirPath, filePaths, &stat)
+		err := handlePkg(dirPkg, dir, srcFiles, &stat)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -55,56 +93,55 @@ func Generate(dir string) {
 	log.Printf("处理完成. 共有更新文件 %d, 未变更文件 %d, 移除文件 %d\n", stat.updated, stat.unchanged, stat.deleted)
 }
 
-// 处理单个文件夹，不递归
-func handleDir(dirPkg string, dirPath string, filePaths []string, stat *statistic) error {
-	// records old files
-	srcFiles := make([]string, 0, len(filePaths))
-	oldFiles := make(map[string]bool)
-	for _, filePath := range filePaths {
-		if isGenerateFile(filePath) {
-			oldFiles[filePath] = true
-		} else {
-			srcFiles = append(srcFiles, filePath)
-		}
-	}
-
-	// generate files
-	pkg, err := ScanPkgInfo(dirPkg, srcFiles)
+// 处理单个包(即单个文件夹)，不处理子包
+func handlePkg(pkgName string, dir string, srcFiles []string, stat *statistic) error {
+	// 扫描源代码文件，生成目标代码
+	genCode, err := genPkgCode(pkgName, srcFiles)
 	if err != nil {
 		return err
 	}
 
-	// show pkg info
-	showPkgInfo(pkg)
-
-	// generate file
-	genCode, ok := GenFileCode(pkg)
-	if ok {
-		genFile := filepath.Join(dirPath, pkg.Name+generateExt)
-		isChanged, err := writeFileIfChanged(genFile, genCode)
+	// 更新或删除生成文件
+	genFile := filepath.Join(dir, genFileName)
+	if genCode != "" { // 有生成代码时，创建或更新文件
+		changed, err := writeFileIfChanged(genFile, genCode)
 		if err != nil {
-			return err
+			return fmt.Errorf("写入文件异常: file=%s, err=%w", genFile, err)
 		}
 
-		delete(oldFiles, genFile)
-		if isChanged {
+		if changed {
 			stat.updated++
 			log.Println("Update file: " + genFile)
 		} else {
 			stat.unchanged++
 		}
-	}
-
-	// remove old file
-	for oldFile, _ := range oldFiles {
-		err := os.Remove(oldFile)
+	} else { // genCode == ""，没有生成代码时，尝试删除文件
+		exists, err := deleteFileIfExists(genFile)
 		if err != nil {
-			return err
+			return fmt.Errorf("删除文件异常: file=%s, err=%w", genFile, err)
 		}
-		stat.deleted++
-		log.Println("Remove File: " + oldFile)
+
+		if exists {
+			stat.deleted++
+			log.Println("Remove File: " + genFile)
+		}
 	}
 	return nil
+}
+
+func genPkgCode(pkgName string, srcFiles []string) (string, error) {
+	// 扫描包信息
+	pkg, err := ScanPkgInfo(pkgName, srcFiles)
+	if err != nil {
+		return "", err
+	}
+
+	// show pkg info
+	showPkgInfo(pkg)
+
+	// 生成文件代码
+	code := GenFileCode(pkg)
+	return code, nil
 }
 
 func getNameFromModFile(dir string) string {
@@ -191,32 +228,4 @@ func tryGuessTag(prop *Property) (string, bool) {
 	}
 
 	return "`" + tag + "`", true
-}
-
-func isGenerateFile(filepath string) bool {
-	return strings.HasSuffix(filepath, generateExt)
-}
-
-func eachGoDir(dir string, handler func(dirPath string, filePaths []string)) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	var filePaths []string
-	for _, file := range files {
-		name := file.Name()
-		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
-			continue
-		}
-
-		path := filepath.Join(dir, name)
-		if file.IsDir() {
-			eachGoDir(path, handler)
-		} else if strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
-			filePaths = append(filePaths, path)
-		}
-	}
-	if len(filePaths) > 0 {
-		handler(dir, filePaths)
-	}
 }

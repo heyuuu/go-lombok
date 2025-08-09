@@ -48,3 +48,12 @@ func writeFileIfChanged(fileName string, content string) (changed bool, err erro
 	err = os.WriteFile(fileName, []byte(content), 0644)
 	return true, err
 }
+
+func deleteFileIfExists(fileName string) (exists bool, err error) {
+	if _, err := os.Stat(fileName); err != nil {
+		return false, nil
+	}
+
+	err = os.Remove(fileName)
+	return true, err
+}
