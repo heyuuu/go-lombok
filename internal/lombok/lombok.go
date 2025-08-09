@@ -2,7 +2,6 @@ package lombok
 
 import (
 	"fmt"
-	"github.com/heyuuu/go-lombok/internal/utils/mapkit"
 	"log"
 	"os"
 	"path/filepath"
@@ -125,7 +124,7 @@ func showPkgInfo(pkg *PkgInfo) {
 	var first = true
 	for _, typ := range pkg.SortedTypes() {
 		guessTags := make(map[string]string)
-		properties := slices.DeleteFunc(typ.Properties(), func(prop *Property) bool {
+		properties := slices.DeleteFunc(slices.Collect(typ.Properties()), func(prop *Property) bool {
 			guessTag, _ := tryGuessTag(prop)
 			guessTags[prop.Name] = guessTag
 			return guessTag == "" || guessTag == prop.Tag
@@ -160,17 +159,17 @@ func tryGuessTag(prop *Property) (string, bool) {
 	var getterTag, setterTag string
 
 	ucName := pascalCase(prop.Name)
-	if prop.ExistGetters[ucName] {
+	if prop.ExistsGetter(ucName) {
 		getterMode, getterTag = 1, `get:""`
-	} else if prop.ExistGetters["Get"+ucName] {
+	} else if prop.ExistsGetter("Get" + ucName) {
 		getterMode, getterTag = 3, `get:"@"`
-	} else if getter, ok := mapkit.FirstKey(prop.ExistGetters); ok {
+	} else if getter, ok := firstOf(prop.ExistingGetters()); ok {
 		getterMode, getterTag = 2, fmt.Sprintf(`get:"%s"`, getter)
 	}
 
-	if prop.ExistSetters["Set"+ucName] {
+	if prop.ExistsSetter("Set" + ucName) {
 		setterMode, setterTag = 1, `set:""`
-	} else if setter, ok := mapkit.FirstKey(prop.ExistSetters); ok {
+	} else if setter, ok := firstOf(prop.ExistingSetters()); ok {
 		setterMode, setterTag = 2, fmt.Sprintf(`set:"%s"`, setter)
 	}
 

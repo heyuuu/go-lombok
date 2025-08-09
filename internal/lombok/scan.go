@@ -69,7 +69,7 @@ func (sc *scanner) updateRecvName(typ string, name string) {
 	if name == "" || typ == "" {
 		return
 	}
-	sc.pkg.FindOrInitType(typ).AddExistRecvName(name)
+	sc.pkg.FindOrInitType(typ).RecordExistsRecvName(name)
 }
 
 func (sc *scanner) inspectFuncDecl(funcDecl *ast.FuncDecl) {
@@ -96,7 +96,7 @@ func (sc *scanner) inspectFuncDecl(funcDecl *ast.FuncDecl) {
 		return
 	}
 	typ := sc.pkg.FindOrInitType(recvTypeName)
-	typ.AddExistRecvName(recvName)
+	typ.RecordExistsRecvName(recvName)
 
 	// 判断是否是事实上的 Getter/Setter
 	// check getter or setter
@@ -124,7 +124,7 @@ func (sc *scanner) inspectFuncDecl(funcDecl *ast.FuncDecl) {
 
 		propName := sel.Sel.Name
 
-		typ.FindOrInitProperty(propName).AddExistGetter(funcDecl.Name.Name)
+		typ.FindOrInitProperty(propName).RecordExistingGetter(funcDecl.Name.Name)
 	} else if len(fnType.Params.List) == 1 && (fnType.Results == nil || len(fnType.Results.List) == 0) {
 		// check param
 		if len(fnType.Params.List) != 1 {
@@ -151,7 +151,7 @@ func (sc *scanner) inspectFuncDecl(funcDecl *ast.FuncDecl) {
 		}
 		propName := left.Sel.Name
 
-		typ.FindOrInitProperty(propName).AddExistSetter(funcDecl.Name.Name)
+		typ.FindOrInitProperty(propName).RecordExistingSetter(funcDecl.Name.Name)
 	}
 }
 
@@ -164,21 +164,15 @@ func (sc *scanner) inspectTypeSpec(typeSpec *ast.TypeSpec) {
 	typeName := typeSpec.Name.Name
 	typ := sc.pkg.FindOrInitType(typeName)
 
-	var propertyNames []string
 	for _, field := range structType.Fields.List {
 		for _, name := range field.Names {
-			// 记录属性顺序
-			propertyNames = append(propertyNames, name.Name)
-
-			// 解析属性特性
-			prop := typ.FindOrInitProperty(name.Name)
+			prop := typ.AddProperty(name.Name)
 			prop.Type = sc.resolveType(field.Type)
 			if field.Tag != nil {
 				sc.parsePropertyTag(typ, prop, field.Tag.Value)
 			}
 		}
 	}
-	typ.PropertyNames = propertyNames
 }
 
 func (sc *scanner) parsePropertyTag(typ *Type, prop *Property, tagStr string) {

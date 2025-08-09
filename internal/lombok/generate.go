@@ -33,23 +33,18 @@ func (b *propertiesFileBuilder) generate(pkg *PkgInfo) *ast.File {
 
 func (b *propertiesFileBuilder) getRecvName(typ *Type) string {
 	recvName := typ.RecvName
-	if recvName == "" && len(typ.ExistRecvNames) == 1 {
-		for name, _ := range typ.ExistRecvNames {
-			return name
+	if recvName == "" {
+		if existsRecvName, ok := typ.ExistsRecvName(); ok {
+			return existsRecvName
 		}
 	}
-	//for _, c := range []byte(typ.Name) {
-	//	if ascii.IsAlpha(c) {
-	//		c = ascii.ToLower(c)
-	//		return string(c)
-	//	}
-	//}
+
 	return "t"
 }
 
 func (b *propertiesFileBuilder) buildTypeProperties(typ *Type) []ast.Decl {
 	// 过滤出需处理的属性
-	properties := slices.DeleteFunc(typ.Properties(), func(property *Property) bool {
+	properties := slices.DeleteFunc(slices.Collect(typ.Properties()), func(property *Property) bool {
 		return property.Getter == "" && property.Setter == ""
 	})
 	if len(properties) == 0 {

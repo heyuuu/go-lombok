@@ -1,6 +1,7 @@
 package lombok
 
 import (
+	"iter"
 	"os"
 	"strings"
 )
@@ -29,9 +30,18 @@ func padRight(s string, size int, pad byte) string {
 	return s + strings.Repeat(string(pad), size-len(s))
 }
 
+// firstOf 返回 iter.Seq 的首个元素
+func firstOf[T any](it iter.Seq[T]) (T, bool) {
+	for item := range it {
+		return item, true
+	}
+	var zero T
+	return zero, false
+}
+
 func writeFileIfChanged(fileName string, content string) (changed bool, err error) {
-	existContent, err := os.ReadFile(fileName)
-	if err == nil && string(existContent) == content {
+	oldContent, err := os.ReadFile(fileName)
+	if err == nil && string(oldContent) == content {
 		return false, nil
 	}
 
