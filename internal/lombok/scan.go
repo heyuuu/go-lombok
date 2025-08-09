@@ -1,7 +1,6 @@
 package lombok
 
 import (
-	f "github.com/heyuuu/go-lombok/internal/utils/astkit"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -9,13 +8,24 @@ import (
 	"strings"
 )
 
-func ScanPkgInfo(dirPkg string, filePaths []string) (*PkgInfo, error) {
-	sc := newScanner(dirPkg)
-	for _, filePath := range filePaths {
-		err := sc.scanFile(filePath)
+// ScanPkgInfo 扫描一个包下的所有文件，返回包信息
+// 隐式要求 srcFiles 必须在同一包下
+func ScanPkgInfo(pkg string, srcFiles []string) (*PkgInfo, error) {
+	sc := newScanner(pkg)
+	for _, srcFile := range srcFiles {
+		err := sc.scanFile(srcFile)
 		if err != nil {
 			return nil, err
 		}
+	}
+	return sc.pkg, nil
+}
+
+func ScanCode(pkg string, code string) (*PkgInfo, error) {
+	sc := newScanner(pkg)
+	err := sc.scanFileCode(code)
+	if err != nil {
+		return nil, err
 	}
 	return sc.pkg, nil
 }
@@ -37,7 +47,22 @@ func (sc *scanner) scanFile(file string) error {
 		return err
 	}
 
+	return sc.scanAstFile(astFile)
+}
+
+func (sc *scanner) scanFileCode(code string) error {
+	astFile, err := parser.ParseFile(token.NewFileSet(), "", code, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+
+	return sc.scanAstFile(astFile)
+}
+
+func (sc *scanner) scanAstFile(astFile *ast.File) error {
 	sc.pkg.Name = astFile.Name.Name
+
+	// 记录当前文件的 imports 表
 	sc.imports = map[string]string{}
 	for _, importSpec := range astFile.Imports {
 		path := strings.Trim(importSpec.Path.Value, `"`)
@@ -51,6 +76,8 @@ func (sc *scanner) scanFile(file string) error {
 		}
 		sc.imports[name] = path
 	}
+
+	// 遍历文件节点
 	ast.Inspect(astFile, sc.inspectNode)
 	return nil
 }
@@ -65,95 +92,7 @@ func (sc *scanner) inspectNode(node ast.Node) bool {
 	return true
 }
 
-func (sc *scanner) updateRecvName(typ string, name string) {
-	if name == "" || typ == "" {
-		return
-	}
-	sc.pkg.FindOrInitType(typ).RecordExistsRecvName(name)
-}
-
-func (sc *scanner) inspectFuncDecl(funcDecl *ast.FuncDecl) {
-	if funcDecl.Recv == nil || len(funcDecl.Recv.List) != 1 {
-		return
-	}
-	field := funcDecl.Recv.List[0]
-	if len(field.Names) != 1 || field.Type == nil {
-		return
-	}
-
-	// 检查类型使用过的 recv 名
-	recvName := field.Names[0].Name
-	recvType := field.Type
-	if t, ok := recvType.(*ast.StarExpr); ok {
-		recvType = t.X
-	}
-	ident, ok := recvType.(*ast.Ident)
-	if !ok {
-		return
-	}
-	recvTypeName := ident.Name
-	if recvName == "" || recvName == "_" || recvTypeName == "" {
-		return
-	}
-	typ := sc.pkg.FindOrInitType(recvTypeName)
-	typ.RecordExistsRecvName(recvName)
-
-	// 判断是否是事实上的 Getter/Setter
-	// check getter or setter
-	if funcDecl.Body == nil || len(funcDecl.Body.List) != 1 {
-		return
-	}
-	fnType := funcDecl.Type
-	stmt := funcDecl.Body.List[0]
-	if len(fnType.Params.List) == 0 && fnType.Results != nil && len(fnType.Results.List) == 1 { // check getter
-		retStmt, ok := stmt.(*ast.ReturnStmt)
-		if !ok || len(retStmt.Results) != 1 {
-			return
-		}
-		sel, ok := retStmt.Results[0].(*ast.SelectorExpr)
-		if !ok {
-			return
-		}
-		obj, ok := sel.X.(*ast.Ident)
-		if !ok {
-			return
-		}
-		if obj.Name != recvName {
-			return
-		}
-
-		propName := sel.Sel.Name
-
-		typ.FindOrInitProperty(propName).RecordExistingGetter(funcDecl.Name.Name)
-	} else if len(fnType.Params.List) == 1 && (fnType.Results == nil || len(fnType.Results.List) == 0) {
-		// check param
-		if len(fnType.Params.List) != 1 {
-			return
-		}
-		valueName := fnType.Params.List[0].Names[0].Name
-
-		// check stmt
-		assign, ok := stmt.(*ast.AssignStmt)
-		if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 || assign.Tok != token.ASSIGN {
-			return
-		}
-		right, ok := assign.Rhs[0].(*ast.Ident)
-		if !ok || right.Name != valueName {
-			return
-		}
-		left, ok := assign.Lhs[0].(*ast.SelectorExpr)
-		if !ok {
-			return
-		}
-		obj, ok := left.X.(*ast.Ident)
-		if !ok || obj.Name != recvName {
-			return
-		}
-		propName := left.Sel.Name
-
-		typ.FindOrInitProperty(propName).RecordExistingSetter(funcDecl.Name.Name)
-	}
-}
+// 分析 struct 类型定义获取属性信息
 
 func (sc *scanner) inspectTypeSpec(typeSpec *ast.TypeSpec) {
 	structType, ok := typeSpec.Type.(*ast.StructType)
@@ -181,7 +120,6 @@ func (sc *scanner) parsePropertyTag(typ *Type, prop *Property, tagStr string) {
 	if len(tagStr) <= 2 {
 		return
 	}
-	tagStr = tagStr[1 : len(tagStr)-1] // 移除头尾的 "`"
 
 	// getter/setter from tag
 	tag := reflect.StructTag(strings.Trim(tagStr, "`"))
@@ -189,35 +127,14 @@ func (sc *scanner) parsePropertyTag(typ *Type, prop *Property, tagStr string) {
 		typ.RecvName = recvVal
 	}
 	if propVal, ok := tag.Lookup("prop"); ok {
-		if propVal == "@" {
-			prop.Getter = "Get" + sc.getterName(prop.Name)
-			prop.Setter = sc.setterName(prop.Name)
-		} else {
-			if propVal == "" {
-				propVal = prop.Name
-			}
-			prop.Getter = sc.getterName(propVal)
-			prop.Setter = sc.setterName(propVal)
-		}
+		prop.Getter = sc.calcGetterName(prop, propVal)
+		prop.Setter = sc.calcSetterName(prop, propVal, true)
 	}
 	if getterVal, ok := tag.Lookup("get"); ok {
-		if getterVal == "@" {
-			prop.Getter = "Get" + sc.getterName(prop.Name)
-		} else if getterVal == "" {
-			prop.Getter = sc.getterName(prop.Name)
-		} else {
-			prop.Getter = getterVal
-		}
+		prop.Getter = sc.calcGetterName(prop, getterVal)
 	}
 	if setterVal, ok := tag.Lookup("set"); ok {
-		if setterVal == "" {
-			prop.Setter = sc.setterName(prop.Name)
-		} else {
-			prop.Setter = setterVal
-		}
-	}
-	if prop.Getter == "" && prop.Setter == "" {
-		return
+		prop.Setter = sc.calcSetterName(prop, setterVal, false)
 	}
 }
 
@@ -226,7 +143,7 @@ func (sc *scanner) resolveType(typ ast.Expr) ast.Expr {
 	case *ast.SelectorExpr: // p.T
 		if ident, ok := x.X.(*ast.Ident); ok {
 			if realPkg, ok := sc.imports[ident.Name]; ok {
-				x.X = f.Ident(realPkg)
+				x.X = ast.NewIdent(realPkg)
 			}
 		}
 	case *ast.StarExpr: // *T
@@ -240,9 +157,134 @@ func (sc *scanner) resolveType(typ ast.Expr) ast.Expr {
 	return typ
 }
 
-func (sc *scanner) getterName(name string) string {
-	return pascalCase(name)
+func (sc *scanner) calcGetterName(prop *Property, tagVal string) string {
+	if tagVal == "" {
+		return pascalCase(prop.Name)
+	} else if tagVal == "@" {
+		return "Get" + pascalCase(prop.Name)
+	} else {
+		return tagVal
+	}
 }
-func (sc *scanner) setterName(name string) string {
-	return "Set" + pascalCase(name)
+
+func (sc *scanner) calcSetterName(prop *Property, tagVal string, isPropTag bool) string {
+	if tagVal == "" || tagVal == "@" {
+		return "Set" + pascalCase(prop.Name)
+	} else if isPropTag {
+		return "Set" + tagVal
+	} else {
+		return tagVal
+	}
+}
+
+// 分析函数定义判断是否为某属性的 getter/setter
+
+func (sc *scanner) inspectFuncDecl(funcDecl *ast.FuncDecl) {
+	// 获取并检查 recv
+	recvName, recvTypeName, ok := sc.getRecvOfFunc(funcDecl)
+	if !ok || recvName == "" || recvName == "_" || recvTypeName == "" {
+		return
+	}
+
+	// 记录使用到的 recvName
+	sc.recordTypeRecvName(recvTypeName, recvName)
+
+	// 判断是否为事实上的 getter/setter
+	if funcDecl.Body == nil || len(funcDecl.Body.List) != 1 {
+		return
+	}
+	fnType := funcDecl.Type
+	stmt := funcDecl.Body.List[0]
+	if len(fnType.Params.List) == 0 && fnType.Results != nil && len(fnType.Results.List) == 1 { // check getter
+		retStmt, ok := stmt.(*ast.ReturnStmt)
+		if !ok || len(retStmt.Results) != 1 {
+			return
+		}
+		sel, ok := retStmt.Results[0].(*ast.SelectorExpr)
+		if !ok {
+			return
+		}
+		obj, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return
+		}
+		if obj.Name != recvName {
+			return
+		}
+
+		propName := sel.Sel.Name
+
+		sc.recordGetter(recvTypeName, propName, funcDecl.Name.Name)
+	} else if len(fnType.Params.List) == 1 && (fnType.Results == nil || len(fnType.Results.List) == 0) { // check setter
+		// check param
+		if len(fnType.Params.List[0].Names) != 1 {
+			return
+		}
+		valueName := fnType.Params.List[0].Names[0].Name
+
+		// check stmt
+		assign, ok := stmt.(*ast.AssignStmt)
+		if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 || assign.Tok != token.ASSIGN {
+			return
+		}
+		right, ok := assign.Rhs[0].(*ast.Ident)
+		if !ok || right.Name != valueName {
+			return
+		}
+		left, ok := assign.Lhs[0].(*ast.SelectorExpr)
+		if !ok {
+			return
+		}
+		obj, ok := left.X.(*ast.Ident)
+		if !ok || obj.Name != recvName {
+			return
+		}
+		propName := left.Sel.Name
+
+		sc.recordSetter(recvTypeName, propName, funcDecl.Name.Name)
+	}
+}
+
+func (sc *scanner) getRecvOfFunc(funcDecl *ast.FuncDecl) (recvName string, recvTypeName string, ok bool) {
+	if funcDecl.Recv == nil || len(funcDecl.Recv.List) != 1 {
+		return
+	}
+
+	field := funcDecl.Recv.List[0]
+	if len(field.Names) != 1 || field.Type == nil {
+		return
+	}
+
+	// 获取并检查 recv 名
+	recvName = field.Names[0].Name
+
+	// 获取并检查 recv 类型名
+	recvType := field.Type
+	if t, ok := recvType.(*ast.StarExpr); ok {
+		recvType = t.X
+	}
+	ident, ok := recvType.(*ast.Ident)
+	if !ok {
+		return
+	}
+	recvTypeName = ident.Name
+
+	return recvName, recvTypeName, true
+}
+
+func (sc *scanner) recordTypeRecvName(typName string, recvName string) {
+	typ := sc.pkg.FindOrInitType(typName)
+	typ.RecordExistsRecvName(recvName)
+}
+
+func (sc *scanner) recordGetter(typName string, propName string, getter string) {
+	typ := sc.pkg.FindOrInitType(typName)
+	prop := typ.FindOrInitProperty(propName)
+	prop.RecordExistingGetter(getter)
+}
+
+func (sc *scanner) recordSetter(typName string, propName string, setter string) {
+	typ := sc.pkg.FindOrInitType(typName)
+	prop := typ.FindOrInitProperty(propName)
+	prop.RecordExistingSetter(setter)
 }
