@@ -35,6 +35,7 @@ func ScanCode(pkg string, code string) (*PkgInfo, error) {
 type scanner struct {
 	pkg     *PkgInfo
 	imports map[string]string
+	errors  []error
 }
 
 func newScanner(pkg string) *scanner {
@@ -81,7 +82,13 @@ func (sc *scanner) scanAstFile(astFile *ast.File) error {
 
 	// 遍历文件节点
 	ast.Inspect(astFile, sc.inspectNode)
-	return nil
+	return errors.Join(sc.errors...)
+}
+
+func (sc *scanner) addError(err error) {
+	if err != nil {
+		sc.errors = append(sc.errors, err)
+	}
 }
 
 func (sc *scanner) inspectNode(node ast.Node) bool {
@@ -110,7 +117,10 @@ func (sc *scanner) inspectTypeSpec(typeSpec *ast.TypeSpec) {
 			prop := typ.AddProperty(name.Name)
 			prop.Type = sc.resolveType(field.Type)
 			if field.Tag != nil {
-				sc.parsePropertyTag(typ, prop, field.Tag.Value)
+				err := sc.parsePropertyTag(typ, prop, field.Tag.Value)
+				if err != nil {
+					sc.addError(fmt.Errorf("类型 %s 的 %s 属性 tag 解析异常: %w", typeName, prop.Name, err))
+				}
 			}
 		}
 	}
@@ -132,18 +142,27 @@ func (sc *scanner) parsePropertyTag(typ *Type, prop *Property, tagStr string) er
 	var hasGetTag, hasSetTag bool
 	if tagVal, ok := tag.Lookup("get"); ok {
 		hasGetTag = true
-		sc.parseGetTag(prop, tagVal)
+		err := sc.parseGetTag(prop, tagVal)
+		if err != nil {
+			return err
+		}
 	}
 	if tagVal, ok := tag.Lookup("set"); ok {
 		hasSetTag = true
-		sc.parseSetTag(prop, tagVal)
+		err := sc.parseSetTag(prop, tagVal)
+		if err != nil {
+			return err
+		}
 	}
 
 	if tagVal, ok := tag.Lookup("prop"); ok {
 		if hasGetTag || hasSetTag {
 			return errors.New("prop 不可与 get 或 set 同时使用")
 		}
-		sc.parsePropTag(prop, tagVal)
+		err := sc.parsePropTag(prop, tagVal)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -181,7 +200,7 @@ func (sc *scanner) parseGetTag(prop *Property, tagVal string) error {
 		prop.Getter = "Get" + pascalCase(prop.Name)
 	default:
 		if !isValidIdent(tagVal) {
-			return fmt.Errorf("错误的 get 值: %s", rawTagVal)
+			return fmt.Errorf(`错误的 get 值 "%s"`, rawTagVal)
 		}
 		prop.Getter = tagVal
 	}
@@ -195,7 +214,7 @@ func (sc *scanner) parseSetTag(prop *Property, tagVal string) error {
 		prop.Setter = "Set" + pascalCase(prop.Name)
 	default:
 		if !isValidIdent(tagVal) {
-			return fmt.Errorf("错误的 get 值: %s", tagVal)
+			return fmt.Errorf(`错误的 get 值 "%s"`, tagVal)
 		}
 		prop.Setter = tagVal
 	}
@@ -217,7 +236,7 @@ func (sc *scanner) parsePropTag(prop *Property, tagVal string) error {
 	}
 	if tagVal != "" {
 		if !isValidIdent(tagVal) {
-			return fmt.Errorf("错误的 prop 值: %s", rawTagVal)
+			return fmt.Errorf(`错误的 prop 值 "%s"`, rawTagVal)
 		}
 
 		propName = tagVal
