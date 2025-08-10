@@ -57,3 +57,23 @@ func deleteFileIfExists(fileName string) (exists bool, err error) {
 	err = os.Remove(fileName)
 	return true, err
 }
+
+// 判断是否为合法标识符名
+// 规则: [a-zA-Z_][a-zA-Z0-9_]*
+func isValidIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	for index, c := range []byte(s) {
+		if ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_' {
+			continue
+		}
+		if index > 0 && ('0' <= c && c <= '9') {
+			continue
+		}
+		return false
+	}
+
+	return true
+}

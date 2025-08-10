@@ -65,7 +65,7 @@ func (b *propertiesFileBuilder) buildTypeProperties(typ *Type) []ast.Decl {
 		resolveTyp := b.resolveType(prop.Type)
 
 		// getter
-		if b.isValidMethodName(prop.Getter) {
+		if isValidIdent(prop.Getter) {
 			if prop.IsRefGetter {
 				getter := &ast.FuncDecl{
 					Recv: recv,
@@ -100,7 +100,7 @@ func (b *propertiesFileBuilder) buildTypeProperties(typ *Type) []ast.Decl {
 		}
 
 		// setter
-		if b.isValidMethodName(prop.Setter) {
+		if isValidIdent(prop.Setter) {
 			setter := &ast.FuncDecl{
 				Recv: recv,
 				Name: ast.NewIdent(prop.Setter),
@@ -143,24 +143,4 @@ func (b *propertiesFileBuilder) resolveType(typ ast.Expr) ast.Expr {
 		x.Elt = b.resolveType(x.Elt)
 	}
 	return typ
-}
-
-// 判断是否是合法方法名
-// 规则: [a-zA-Z_][a-zA-Z0-9_]*
-func (b *propertiesFileBuilder) isValidMethodName(name string) bool {
-	if name == "" {
-		return false
-	}
-
-	for index, c := range []byte(name) {
-		if ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || c == '_' {
-			continue
-		}
-		if index > 0 && ('0' <= c && c <= '9') {
-			continue
-		}
-		return false
-	}
-
-	return true
 }

@@ -27,6 +27,10 @@ func NewPkgInfo(pkg string) *PkgInfo {
 	}
 }
 
+func (pkg *PkgInfo) FindType(typeName string) *Type {
+	return pkg.types[typeName]
+}
+
 func (pkg *PkgInfo) FindOrInitType(typeName string) *Type {
 	if t, exists := pkg.types[typeName]; exists {
 		return t
@@ -66,6 +70,10 @@ func NewType(name string) *Type {
 func (typ *Type) AddProperty(propName string) *Property {
 	typ.propertyNames = append(typ.propertyNames, propName)
 	return typ.FindOrInitProperty(propName)
+}
+
+func (typ *Type) FindProperty(propName string) *Property {
+	return typ.propertyMap[propName]
 }
 
 func (typ *Type) FindOrInitProperty(propName string) *Property {

@@ -1,6 +1,8 @@
 package lombok
 
 import (
+	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -114,11 +116,11 @@ func (sc *scanner) inspectTypeSpec(typeSpec *ast.TypeSpec) {
 	}
 }
 
-func (sc *scanner) parsePropertyTag(typ *Type, prop *Property, tagStr string) {
+func (sc *scanner) parsePropertyTag(typ *Type, prop *Property, tagStr string) error {
 	prop.Tag = tagStr
 
 	if len(tagStr) <= 2 {
-		return
+		return nil
 	}
 
 	// getter/setter from tag
@@ -126,24 +128,25 @@ func (sc *scanner) parsePropertyTag(typ *Type, prop *Property, tagStr string) {
 	if recvVal, ok := tag.Lookup("recv"); ok {
 		typ.RecvName = recvVal
 	}
-	if propVal, ok := tag.Lookup("prop"); ok {
-		if strings.HasPrefix(propVal, "&") {
-			prop.IsRefGetter = true
-			propVal = propVal[1:]
+
+	var hasGetTag, hasSetTag bool
+	if tagVal, ok := tag.Lookup("get"); ok {
+		hasGetTag = true
+		sc.parseGetTag(prop, tagVal)
+	}
+	if tagVal, ok := tag.Lookup("set"); ok {
+		hasSetTag = true
+		sc.parseSetTag(prop, tagVal)
+	}
+
+	if tagVal, ok := tag.Lookup("prop"); ok {
+		if hasGetTag || hasSetTag {
+			return errors.New("prop 不可与 get 或 set 同时使用")
 		}
-		prop.Getter = sc.calcGetterName(prop, propVal)
-		prop.Setter = sc.calcSetterName(prop, propVal, true)
+		sc.parsePropTag(prop, tagVal)
 	}
-	if getterVal, ok := tag.Lookup("get"); ok {
-		if strings.HasPrefix(getterVal, "&") {
-			prop.IsRefGetter = true
-			getterVal = getterVal[1:]
-		}
-		prop.Getter = sc.calcGetterName(prop, getterVal)
-	}
-	if setterVal, ok := tag.Lookup("set"); ok {
-		prop.Setter = sc.calcSetterName(prop, setterVal, false)
-	}
+
+	return nil
 }
 
 func (sc *scanner) resolveType(typ ast.Expr) ast.Expr {
@@ -165,24 +168,69 @@ func (sc *scanner) resolveType(typ ast.Expr) ast.Expr {
 	return typ
 }
 
-func (sc *scanner) calcGetterName(prop *Property, tagVal string) string {
-	if tagVal == "" {
-		return pascalCase(prop.Name)
-	} else if tagVal == "@" {
-		return "Get" + pascalCase(prop.Name)
-	} else {
-		return tagVal
+func (sc *scanner) parseGetTag(prop *Property, tagVal string) error {
+	rawTagVal := tagVal
+	if strings.HasPrefix(tagVal, "&") {
+		prop.IsRefGetter = true
+		tagVal = tagVal[1:]
 	}
+	switch tagVal {
+	case "":
+		prop.Getter = pascalCase(prop.Name)
+	case "@":
+		prop.Getter = "Get" + pascalCase(prop.Name)
+	default:
+		if !isValidIdent(tagVal) {
+			return fmt.Errorf("错误的 get 值: %s", rawTagVal)
+		}
+		prop.Getter = tagVal
+	}
+	return nil
 }
 
-func (sc *scanner) calcSetterName(prop *Property, tagVal string, isPropTag bool) string {
-	if tagVal == "" || tagVal == "@" {
-		return "Set" + pascalCase(prop.Name)
-	} else if isPropTag {
-		return "Set" + tagVal
-	} else {
-		return tagVal
+func (sc *scanner) parseSetTag(prop *Property, tagVal string) error {
+	//rawTagVal := tagVal
+	switch tagVal {
+	case "", "@":
+		prop.Setter = "Set" + pascalCase(prop.Name)
+	default:
+		if !isValidIdent(tagVal) {
+			return fmt.Errorf("错误的 get 值: %s", tagVal)
+		}
+		prop.Setter = tagVal
 	}
+	return nil
+}
+
+func (sc *scanner) parsePropTag(prop *Property, tagVal string) error {
+	rawTagVal := tagVal
+	if strings.HasPrefix(tagVal, "&") {
+		prop.IsRefGetter = true
+		tagVal = tagVal[1:]
+	}
+
+	// 可选的 @ 前缀 + 可选的自定义属性名
+	getModel, propName := false, prop.Name
+	if strings.HasPrefix(tagVal, "@") {
+		getModel = true
+		tagVal = tagVal[1:]
+	}
+	if tagVal != "" {
+		if !isValidIdent(tagVal) {
+			return fmt.Errorf("错误的 prop 值: %s", rawTagVal)
+		}
+
+		propName = tagVal
+	}
+
+	if !getModel {
+		prop.Getter = pascalCase(propName)
+		prop.Setter = "Set" + pascalCase(propName)
+	} else {
+		prop.Getter = "Get" + pascalCase(propName)
+		prop.Setter = "Set" + pascalCase(propName)
+	}
+	return nil
 }
 
 // 分析函数定义判断是否为某属性的 getter/setter
