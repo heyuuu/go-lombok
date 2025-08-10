@@ -8,7 +8,8 @@ import (
 )
 
 var generateFlags struct {
-	dir string
+	dir      string
+	excludes []string
 }
 
 // generateCmd represents the generate command
@@ -22,7 +23,7 @@ var generateCmd = &cobra.Command{
 			log.Fatalln(err)
 		}
 
-		lombok.Generate(dir)
+		lombok.Generate(dir, generateFlags.excludes)
 	},
 }
 
@@ -31,4 +32,5 @@ func init() {
 
 	// Here you will define your flags and configuration settings.
 	generateCmd.Flags().StringVarP(&generateFlags.dir, "dir", "d", "", "src code dir")
+	generateCmd.Flags().StringSliceVarP(&generateFlags.excludes, "exclude", "e", nil, "exclude path")
 }

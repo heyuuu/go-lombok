@@ -13,7 +13,11 @@ import (
 const genFileName = "properties.gen.go"
 
 // 通过代码目录遍历go包并调用回调
-func iterPkgFiles(root string, handler func(dir string, srcFiles []string)) {
+func iterPkgFiles(root string, excludes map[string]bool, handler func(dir string, srcFiles []string)) {
+	if excludes[root] {
+		return
+	}
+
 	files, err := os.ReadDir(root)
 	if err != nil {
 		return
@@ -28,7 +32,7 @@ func iterPkgFiles(root string, handler func(dir string, srcFiles []string)) {
 
 		path := filepath.Join(root, name)
 		if file.IsDir() {
-			iterPkgFiles(path, handler)
+			iterPkgFiles(path, excludes, handler)
 		} else if strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !strings.HasSuffix(name, ".gen.go") {
 			srcFiles = append(srcFiles, path)
 		}
@@ -52,7 +56,7 @@ func GenerateByCode(pkgName string, code string) (string, error) {
 // Clear 清理生成文件
 func Clear(root string) {
 	deleted := 0
-	iterPkgFiles(root, func(dir string, _ []string) {
+	iterPkgFiles(root, nil, func(dir string, _ []string) {
 		genFile := filepath.Join(dir, genFileName)
 		exists, err := deleteFileIfExists(genFile)
 		if err != nil {
@@ -74,12 +78,12 @@ type statistic struct {
 }
 
 // Generate 基于代码目录的扫描、生成、清理
-func Generate(root string) {
+func Generate(root string, excludes []string) {
 	basePkg := getNameFromModFile(root)
 	fmt.Println(basePkg)
 
 	var stat statistic
-	iterPkgFiles(root, func(dir string, srcFiles []string) {
+	iterPkgFiles(root, formatExcludes(root, excludes), func(dir string, srcFiles []string) {
 		var dirPkg string
 		if basePkg != "" && strings.HasPrefix(dir, root) {
 			dirPkg = basePkg + dir[len(root):]
@@ -91,6 +95,27 @@ func Generate(root string) {
 		}
 	})
 	log.Printf("处理完成. 共有更新文件 %d, 未变更文件 %d, 移除文件 %d\n", stat.updated, stat.unchanged, stat.deleted)
+}
+
+func formatExcludes(root string, excludes []string) map[string]bool {
+	if len(excludes) == 0 {
+		return nil
+	}
+
+	excludesMap := make(map[string]bool)
+	for _, exclude := range excludes {
+		exclude = strings.TrimSpace(exclude)
+		if exclude == "" {
+			continue
+		}
+		if filepath.IsAbs(exclude) {
+			exclude = filepath.Clean(exclude)
+		} else {
+			exclude = filepath.Join(root, exclude)
+		}
+		excludesMap[exclude] = true
+	}
+	return excludesMap
 }
 
 // 处理单个包(即单个文件夹)，不处理子包
